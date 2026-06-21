@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+.env
+.env.local
+.vite
+
+# MediaPipe model is downloaded at setup time (see README), not committed.
+public/models/*.task

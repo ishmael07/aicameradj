@@ -1,0 +1,93 @@
+:root {
+  /* Palette — deep neon-on-glass */
+  --bg-0: #05060b;
+  --bg-1: #0a0d18;
+  --glass: rgba(255, 255, 255, 0.06);
+  --glass-strong: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-border-strong: rgba(255, 255, 255, 0.28);
+  --text: #eef2ff;
+  --text-dim: rgba(238, 242, 255, 0.55);
+  --text-faint: rgba(238, 242, 255, 0.3);
+
+  --accent-a: #4cc9f0; /* deck A cyan */
+  --accent-b: #ff5d73; /* deck B coral */
+  --accent: #b794ff; /* neutral purple */
+  --good: #06d6a0;
+  --warn: #ffd166;
+  --bad: #ff5d73;
+
+  --shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+  --blur: 18px;
+  --radius: 18px;
+  --radius-sm: 10px;
+
+  font-family: "Inter", "SF Pro Display", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg-0);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* ---- Reusable glass surface ---- */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(var(--blur));
+  -webkit-backdrop-filter: blur(var(--blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.glass-strong {
+  background: var(--glass-strong);
+  border-color: var(--glass-border-strong);
+}
+
+/* Highlight ring for hover/grab from a hand cursor */
+.control-hover {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 24px var(--accent);
+}
+.control-grab {
+  box-shadow: 0 0 0 3px var(--good), 0 0 32px var(--good);
+}
+
+/* Subtle scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 8px;
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
