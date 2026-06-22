@@ -1,17 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { TopBar } from "./components/TopBar";
 import { DeckPanel } from "./components/DeckPanel";
 import { Mixer } from "./components/Mixer";
-import { MusicBrowser } from "./components/MusicBrowser";
-import { CameraOverlay } from "./components/CameraOverlay";
+import { LibraryDrawer } from "./components/LibraryDrawer";
+import { CameraStage } from "./components/CameraStage";
 import { useStore } from "./store";
 import { useCameraControl } from "./control/useCameraControl";
 import type { CursorState } from "./control/types";
 
 /**
- * Root layout + the single rAF loop that (1) syncs deck playhead/level from the
- * audio engine into the store and (2) mirrors the gesture cursors ref into
- * React state for the overlay to render. Both run at animation cadence.
+ * Holographic-console layout: the live camera fills the screen (you, on stage),
+ * two translucent deck columns float at the edges, a mixer + sampler bar floats
+ * low-center, and the library lives in a slide-up drawer. A single rAF loop
+ * (1) syncs deck playhead/level from the audio engine and (2) mirrors gesture
+ * cursors into React state for the overlay.
  */
 export function App(): JSX.Element {
   const init = useStore((s) => s.init);
@@ -19,14 +21,13 @@ export function App(): JSX.Element {
   const camera = useCameraControl();
 
   const [cursors, setCursors] = useState<CursorState[]>([]);
-  const cameraOn = camera.status === "running" || camera.status === "starting";
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const cameraOn = camera.state.phase === "live" || camera.state.phase === "starting";
 
-  // Initialize the audio engine + sources once.
   useEffect(() => {
     init();
   }, [init]);
 
-  // Single animation loop: engine sync + cursor mirroring.
   const cursorsRef = camera.cursorsRef;
   useEffect(() => {
     let raf = 0;
@@ -34,8 +35,6 @@ export function App(): JSX.Element {
     const tick = (): void => {
       raf = requestAnimationFrame(tick);
       syncFromEngine();
-      // Only push cursor state to React when it meaningfully changes to avoid
-      // churning the overlay every frame when hands are still.
       const cur = cursorsRef.current;
       const json = JSON.stringify(cur);
       if (json !== lastCursorJson) {
@@ -52,59 +51,87 @@ export function App(): JSX.Element {
     else void camera.start();
   }
 
-  const statusText =
-    camera.status === "running"
-      ? "tracking"
-      : camera.status === "starting"
-        ? "starting"
-        : camera.status === "denied"
-          ? "denied"
-          : camera.status === "error"
-            ? "error"
-            : "camera off";
-
   return (
     <>
-      <CameraOverlay
-        video={camera.video}
-        cursors={cursors}
-        status={statusText}
-        latencyMs={camera.latencyRef.current}
+      <CameraStage video={camera.video} cursors={cursors} cameraLive={camera.state.phase === "live"} />
+
+      <TopBar
+        camera={camera.state}
+        onToggleCamera={onToggleCamera}
+        onToggleLibrary={() => setLibraryOpen((v) => !v)}
+        libraryOpen={libraryOpen}
       />
 
+      {/* Floating console: decks at the edges, mixer low-center. */}
       <div
         style={{
-          position: "relative",
-          zIndex: 1,
-          height: "100%",
+          position: "fixed",
+          inset: 0,
+          zIndex: 30,
+          pointerEvents: "none",
           display: "flex",
           flexDirection: "column",
+          justifyContent: "space-between",
           gap: 12,
-          padding: 12,
+          padding: "64px 18px 18px",
         }}
       >
-        <TopBar cameraStatus={camera.status} onToggleCamera={onToggleCamera} />
-
-        {/* Main mixing area: deck A | mixer | deck B */}
+        {/* Decks row */}
         <div
           style={{
-            flex: 1,
-            minHeight: 0,
             display: "flex",
-            gap: 12,
-            alignItems: "stretch",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 18,
+            minHeight: 0,
+            flex: "0 1 auto",
           }}
         >
-          <DeckPanel deck="a" />
-          <Mixer />
-          <DeckPanel deck="b" mirror />
+          <div style={{ pointerEvents: "auto", maxHeight: "100%", overflowY: "auto", overflowX: "hidden" }}>
+            <DeckPanel deck="a" />
+          </div>
+          <div style={{ pointerEvents: "auto", maxHeight: "100%", overflowY: "auto", overflowX: "hidden" }}>
+            <DeckPanel deck="b" mirror />
+          </div>
         </div>
 
-        {/* Library browser docked at the bottom. */}
-        <div style={{ height: 260, flexShrink: 0 }}>
-          <MusicBrowser />
+        {/* Mixer + sampler bar, floating low-center */}
+        <div style={{ display: "flex", justifyContent: "center", pointerEvents: "none", flexShrink: 0 }}>
+          <div style={{ pointerEvents: "auto" }}>
+            <Mixer />
+          </div>
         </div>
       </div>
+
+      <LibraryDrawer open={libraryOpen} onClose={() => setLibraryOpen(false)} />
+
+      {/* First-run hint when camera is off */}
+      {camera.state.phase === "idle" && <StartHint />}
     </>
+  );
+}
+
+function StartHint(): JSX.Element {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 20,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+        pointerEvents: "none",
+        textAlign: "center",
+      }}
+    >
+      <div style={{ fontSize: 40, opacity: 0.9 }}>🎛️</div>
+      <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 0.4 }}>Mix with your hands</div>
+      <div style={{ fontSize: 14, color: "var(--text-dim)", maxWidth: 420 }}>
+        Click <b style={{ color: "var(--text)" }}>Enable Camera</b> in the top-right, then pinch the air to grab knobs and faders. Open the <b style={{ color: "var(--text)" }}>Library</b> to load tracks.
+      </div>
+    </div>
   );
 }

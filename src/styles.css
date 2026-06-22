@@ -1,26 +1,33 @@
 :root {
-  /* Palette — deep neon-on-glass */
-  --bg-0: #05060b;
-  --bg-1: #0a0d18;
-  --glass: rgba(255, 255, 255, 0.06);
-  --glass-strong: rgba(255, 255, 255, 0.1);
-  --glass-border: rgba(255, 255, 255, 0.14);
-  --glass-border-strong: rgba(255, 255, 255, 0.28);
-  --text: #eef2ff;
-  --text-dim: rgba(238, 242, 255, 0.55);
-  --text-faint: rgba(238, 242, 255, 0.3);
+  /* ---- Minimal, modern palette: restrained neutrals + 2 deck accents ---- */
+  --bg-0: #060708;
+  --bg-1: #0c0e12;
 
-  --accent-a: #4cc9f0; /* deck A cyan */
-  --accent-b: #ff5d73; /* deck B coral */
-  --accent: #b794ff; /* neutral purple */
-  --good: #06d6a0;
-  --warn: #ffd166;
-  --bad: #ff5d73;
+  /* Glass surfaces — cool, subtle, layered */
+  --glass: rgba(18, 20, 26, 0.55);
+  --glass-strong: rgba(26, 29, 38, 0.72);
+  --glass-faint: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-border-strong: rgba(255, 255, 255, 0.22);
 
-  --shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
-  --blur: 18px;
-  --radius: 18px;
-  --radius-sm: 10px;
+  --text: #f4f6fb;
+  --text-dim: rgba(244, 246, 251, 0.62);
+  --text-faint: rgba(244, 246, 251, 0.34);
+
+  /* Deck accents — one cool, one warm. Used sparingly. */
+  --accent-a: #38e1ff; /* deck A */
+  --accent-b: #ff6b8b; /* deck B */
+  --accent: #8b7bff; /* neutral interactive accent */
+  --good: #2ee6a6;
+  --warn: #ffce5c;
+  --bad: #ff6b6b;
+
+  --shadow: 0 12px 48px rgba(0, 0, 0, 0.55);
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.35);
+  --blur: 22px;
+  --radius: 22px;
+  --radius-sm: 12px;
+  --radius-xs: 8px;
 
   font-family: "Inter", "SF Pro Display", system-ui, -apple-system, sans-serif;
   color: var(--text);
@@ -57,8 +64,8 @@ button {
 /* ---- Reusable glass surface ---- */
 .glass {
   background: var(--glass);
-  backdrop-filter: blur(var(--blur));
-  -webkit-backdrop-filter: blur(var(--blur));
+  backdrop-filter: blur(var(--blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.2);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -69,15 +76,26 @@ button {
   border-color: var(--glass-border-strong);
 }
 
-/* Highlight ring for hover/grab from a hand cursor */
+/* Highlight ring for hover / grab from a hand or pointer */
 .control-hover {
-  box-shadow: 0 0 0 2px var(--accent), 0 0 24px var(--accent);
+  outline: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
 }
 .control-grab {
-  box-shadow: 0 0 0 3px var(--good), 0 0 32px var(--good);
+  outline: 2px solid var(--good);
+  outline-offset: 2px;
+  box-shadow: 0 0 28px color-mix(in srgb, var(--good) 60%, transparent);
 }
 
-/* Subtle scrollbars */
+/* Section label */
+.label {
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -86,8 +104,35 @@ button {
   background: var(--glass-border);
   border-radius: 8px;
 }
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 
 .mono {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
+}
+
+@keyframes aicdj-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes aicdj-rise {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes aicdj-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

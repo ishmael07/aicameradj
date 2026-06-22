@@ -34,14 +34,22 @@ async function init(
   numHands: number,
 ): Promise<void> {
   const vision = await FilesetResolver.forVisionTasks(wasmBasePath);
-  landmarker = await HandLandmarker.createFromOptions(vision, {
-    baseOptions: { modelAssetPath, delegate: "GPU" },
-    numHands,
-    runningMode: "VIDEO",
-    minHandDetectionConfidence: 0.5,
-    minHandPresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
-  });
+  const make = (delegate: "GPU" | "CPU"): Promise<HandLandmarker> =>
+    HandLandmarker.createFromOptions(vision, {
+      baseOptions: { modelAssetPath, delegate },
+      numHands,
+      runningMode: "VIDEO",
+      minHandDetectionConfidence: 0.5,
+      minHandPresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    });
+  // GPU is fastest but silently unavailable on some machines/browsers; fall
+  // back to CPU so tracking still works rather than throwing a "weird error".
+  try {
+    landmarker = await make("GPU");
+  } catch {
+    landmarker = await make("CPU");
+  }
   post({ type: "ready" });
 }
 

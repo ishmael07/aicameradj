@@ -89,13 +89,11 @@ export function MusicBrowser(): JSX.Element {
 
   return (
     <div
-      className="glass"
       style={{
         display: "flex",
         flexDirection: "column",
         height: "100%",
         minHeight: 0,
-        borderRadius: "var(--radius)",
         overflow: "hidden",
       }}
     >

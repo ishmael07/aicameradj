@@ -5,9 +5,10 @@ import { useControl } from "../control/useControl";
 
 interface TurntableProps {
   deck: DeckId;
+  /** Platter diameter in px (default 260). */
+  size?: number;
 }
 
-const SIZE = 260;
 // Revolutions per second at normal playback speed (stylized 33⅓ rpm vibe).
 const REV_PER_SEC = 1.35;
 // How fast the platter eases toward its target spin speed (per second).
@@ -21,7 +22,8 @@ const SPIN_EASE = 6;
  * React re-render. Pointer drag around the platter scratches (angular velocity
  * -> store.scratch), and the mouse wheel nudges the deck.
  */
-export function Turntable({ deck }: TurntableProps): JSX.Element {
+export function Turntable({ deck, size = 260 }: TurntableProps): JSX.Element {
+  const SIZE = size;
   const track = useStore((s) => s.decks[deck].track);
   const playing = useStore((s) => s.decks[deck].playing);
   const ready = useStore((s) => s.decks[deck].ready);
@@ -313,7 +315,7 @@ export function Turntable({ deck }: TurntableProps): JSX.Element {
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [accentHex, deckLetter]);
+  }, [accentHex, deckLetter, SIZE]);
 
   return (
     <div

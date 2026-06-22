@@ -1,16 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { HandTracker, type TrackerStatus } from "../vision/HandTracker";
+import { HandTracker, type CameraState } from "../vision/HandTracker";
 import { GestureController } from "./GestureController";
 import { controlRegistry } from "./ControlRegistry";
 import type { CursorState } from "./types";
 import type { VisionFrame } from "../vision/types";
 
+const INITIAL_STATE: CameraState = {
+  phase: "idle",
+  tracking: false,
+  trackingError: null,
+  detail: null,
+};
+
 export interface CameraControl {
-  /** Start the camera + hand tracking (call from a user gesture). */
+  /** Start the camera (call from a user gesture). Camera shows immediately;
+   *  hand tracking spins up best-effort afterwards. */
   start: () => Promise<void>;
   stop: () => void;
-  status: TrackerStatus;
-  statusDetail: string | null;
+  /** Full camera + tracking state. */
+  state: CameraState;
   /** The video element to display (owned by the tracker). */
   video: HTMLVideoElement | null;
   /** Latest cursors, updated via rAF (read in a render loop). */
@@ -19,13 +27,12 @@ export interface CameraControl {
 }
 
 /**
- * React hook that wires the HandTracker to the GestureController and the
- * control registry. Cursor state is exposed via a ref (updated every frame)
- * so consumers can render it without forcing a React re-render per frame.
+ * React hook wiring the HandTracker to the GestureController and the control
+ * registry. Cursor state is exposed via a ref (updated every frame) so the
+ * overlay can render without a React re-render per frame.
  */
 export function useCameraControl(): CameraControl {
-  const [status, setStatus] = useState<TrackerStatus>("idle");
-  const [statusDetail, setStatusDetail] = useState<string | null>(null);
+  const [state, setState] = useState<CameraState>(INITIAL_STATE);
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
 
   const trackerRef = useRef<HandTracker | null>(null);
@@ -49,10 +56,8 @@ export function useCameraControl(): CameraControl {
   }, []);
 
   const start = useCallback(async () => {
-    // Proactively tear down any previous tracker (e.g. after a prior denial or
-    // error) so a retry always builds a fresh one. The HandTracker only emits a
-    // terminal status and never auto-clears the ref, so the retry path lives
-    // here rather than in onStatus (which keeps the visible denied/error state).
+    // Tear down any stale tracker (e.g. after a prior denial/error) so a retry
+    // always builds a fresh one.
     if (trackerRef.current) {
       trackerRef.current.stop();
       trackerRef.current = null;
@@ -60,10 +65,9 @@ export function useCameraControl(): CameraControl {
     const tracker = new HandTracker({
       numHands: 2,
       onFrame,
-      onStatus: (s, detail) => {
-        setStatus(s);
-        setStatusDetail(detail ?? null);
-        if (s === "idle" || s === "denied" || s === "error") {
+      onState: (s) => {
+        setState(s);
+        if (s.phase === "idle" || s.phase === "denied" || s.phase === "error") {
           cursorsRef.current = [];
         }
       },
@@ -87,5 +91,5 @@ export function useCameraControl(): CameraControl {
     };
   }, []);
 
-  return { start, stop, status, statusDetail, video, cursorsRef, latencyRef };
+  return { start, stop, state, video, cursorsRef, latencyRef };
 }

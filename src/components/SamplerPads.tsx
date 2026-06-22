@@ -62,13 +62,11 @@ export function SamplerPads(): JSX.Element {
 
   return (
     <section
-      className="glass"
       style={{
-        padding: 14,
-        borderRadius: "var(--radius)",
         display: "flex",
         flexDirection: "column",
-        gap: 12,
+        gap: 8,
+        justifyContent: "center",
       }}
     >
       <header
@@ -76,38 +74,19 @@ export function SamplerPads(): JSX.Element {
           display: "flex",
           alignItems: "baseline",
           justifyContent: "space-between",
+          gap: 16,
         }}
       >
-        <h2
-          style={{
-            margin: 0,
-            fontSize: 12,
-            fontWeight: 700,
-            letterSpacing: 2,
-            textTransform: "uppercase",
-            color: "var(--text-dim)",
-          }}
-        >
-          Sampler
-        </h2>
-        <span
-          style={{
-            fontSize: 10,
-            letterSpacing: 0.5,
-            color: "var(--text-faint)",
-            textTransform: "uppercase",
-          }}
-        >
-          Keys 1&ndash;8
-        </span>
+        <span className="label">Sampler</span>
+        <span className="label" style={{ fontSize: 9 }}>Keys 1&ndash;8</span>
       </header>
 
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-          gridAutoRows: "1fr",
-          gap: 10,
+          gridTemplateColumns: "repeat(4, 64px)",
+          gridAutoRows: "64px",
+          gap: 8,
         }}
       >
         {pads.map((pad, i) => (

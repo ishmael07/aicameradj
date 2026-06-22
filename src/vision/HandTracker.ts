@@ -11,44 +11,68 @@ import type {
 
 const WASM_BASE =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
-const MODEL_PATH = "/models/hand_landmarker.task";
 
-export type TrackerStatus =
-  | "idle"
-  | "starting"
-  | "running"
-  | "error"
-  | "denied";
+// Default to the official CDN model so the app works with ZERO setup. A
+// self-hosted copy at /models/hand_landmarker.task is tried first (instant if
+// present, e.g. after `npm run setup:model`), otherwise we fall back to the CDN.
+const LOCAL_MODEL_PATH = "/models/hand_landmarker.task";
+const CDN_MODEL_PATH =
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
+
+/**
+ * Camera/tracking lifecycle phases. The camera is LIVE (video visible) as soon
+ * as `phase === "live"`, independent of whether hand tracking is working —
+ * tracking is a best-effort layer that can fail without hiding the camera.
+ */
+export type CameraPhase = "idle" | "starting" | "live" | "denied" | "error";
+
+export interface CameraState {
+  phase: CameraPhase;
+  /** Hand tracking is actively producing frames. */
+  tracking: boolean;
+  /** Why tracking is unavailable, if it failed (camera still works). */
+  trackingError: string | null;
+  /** Camera error detail (when phase === "denied" | "error"). */
+  detail: string | null;
+}
 
 export interface HandTrackerOptions {
   numHands?: number;
-  /** One smoothing latch per hand slot keeps pinch state stable. */
   onFrame: (frame: VisionFrame) => void;
-  onStatus?: (status: TrackerStatus, detail?: string) => void;
+  onState?: (state: CameraState) => void;
 }
 
 /**
- * Owns the camera stream + vision worker. Captures frames, ships ImageBitmaps
- * to the worker, and post-processes raw landmarks into a display-space
- * VisionFrame (mirroring, cursor, pinch hysteresis, gesture).
+ * Owns the camera stream + (best-effort) vision worker.
  *
- * Mirroring: the camera preview is shown mirrored (CSS scaleX(-1)), so we flip
- * model x to xDisplay = 1 - x and flip the handedness label so it matches what
- * the user sees.
+ * Crucially, the camera display is DECOUPLED from hand tracking: we attach and
+ * play the stream first and report phase "live" immediately, then attempt to
+ * spin up the MediaPipe worker. If the model/worker fails to load, the camera
+ * keeps running and we only set `trackingError`.
+ *
+ * Mirroring: the preview is shown mirrored (CSS scaleX(-1)), so we flip model x
+ * to xDisplay = 1 - x and flip the handedness label to match what the user sees.
  */
 export class HandTracker {
   readonly video: HTMLVideoElement;
   private worker: Worker | null = null;
   private stream: MediaStream | null = null;
   private rafId = 0;
-  private running = false;
+  private cameraLive = false;
+  private tracking = false;
   private busy = false;
   private lastVideoTime = -1;
-  private frameTimestamp = 0;
+
+  private state: CameraState = {
+    phase: "idle",
+    tracking: false,
+    trackingError: null,
+    detail: null,
+  };
 
   private readonly numHands: number;
   private readonly onFrame: (frame: VisionFrame) => void;
-  private readonly onStatus?: (status: TrackerStatus, detail?: string) => void;
+  private readonly onState?: (state: CameraState) => void;
 
   // One latch per hand index slot (left/right rarely swap mid-gesture).
   private readonly latches: PinchLatch[] = [new PinchLatch(), new PinchLatch()];
@@ -56,56 +80,87 @@ export class HandTracker {
   constructor(opts: HandTrackerOptions) {
     this.numHands = opts.numHands ?? 2;
     this.onFrame = opts.onFrame;
-    this.onStatus = opts.onStatus;
+    this.onState = opts.onState;
     this.video = document.createElement("video");
     this.video.playsInline = true;
     this.video.muted = true;
+    this.video.autoplay = true;
+  }
+
+  private emit(patch: Partial<CameraState>): void {
+    this.state = { ...this.state, ...patch };
+    this.onState?.(this.state);
   }
 
   async start(): Promise<void> {
-    if (this.running) return;
-    this.onStatus?.("starting");
+    if (this.cameraLive || this.state.phase === "starting") return;
+    this.emit({ phase: "starting", detail: null, trackingError: null });
+
+    // 1) Camera first — this is what gates the visible video.
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720, frameRate: 30, facingMode: "user" },
         audio: false,
       });
     } catch (err) {
-      this.onStatus?.("denied", String(err));
-      return;
-    }
-    this.video.srcObject = this.stream;
-    try {
-      await this.video.play();
-    } catch (err) {
-      this.onStatus?.("error", String(err));
+      const denied =
+        err instanceof DOMException &&
+        (err.name === "NotAllowedError" || err.name === "SecurityError");
+      this.emit({ phase: denied ? "denied" : "error", detail: String(err) });
       return;
     }
 
-    this.worker = new HandWorker();
-    this.worker.onmessage = (ev: MessageEvent<WorkerOutMessage>) =>
-      this.handleWorkerMessage(ev.data);
-    const initMsg: WorkerInMessage = {
-      type: "init",
-      modelAssetPath: MODEL_PATH,
-      wasmBasePath: WASM_BASE,
-      numHands: this.numHands,
-    };
-    this.worker.postMessage(initMsg);
+    this.video.srcObject = this.stream;
+    try {
+      await this.video.play();
+    } catch {
+      // Some browsers resolve play() late; the element still renders frames.
+      // Don't fail the camera over a play() rejection.
+    }
+
+    this.cameraLive = true;
+    this.emit({ phase: "live", tracking: false });
+
+    // 2) Tracking second — best effort, never blocks/hides the camera.
+    void this.startTracking();
+  }
+
+  private async startTracking(): Promise<void> {
+    try {
+      // Prefer a self-hosted model if it exists; otherwise use the CDN.
+      const modelAssetPath = (await urlExists(LOCAL_MODEL_PATH))
+        ? LOCAL_MODEL_PATH
+        : CDN_MODEL_PATH;
+
+      this.worker = new HandWorker();
+      this.worker.onmessage = (ev: MessageEvent<WorkerOutMessage>) =>
+        this.handleWorkerMessage(ev.data);
+      this.worker.onerror = (e) => {
+        this.emit({ tracking: false, trackingError: e.message || "worker error" });
+      };
+      const initMsg: WorkerInMessage = {
+        type: "init",
+        modelAssetPath,
+        wasmBasePath: WASM_BASE,
+        numHands: this.numHands,
+      };
+      this.worker.postMessage(initMsg);
+    } catch (err) {
+      this.emit({ tracking: false, trackingError: String(err) });
+    }
   }
 
   private handleWorkerMessage(msg: WorkerOutMessage): void {
     if (msg.type === "ready") {
-      this.running = true;
-      this.onStatus?.("running");
+      this.tracking = true;
+      this.emit({ tracking: true, trackingError: null });
       this.loop();
       return;
     }
     if (msg.type === "error") {
-      // Clear busy so a transient inference error doesn't permanently stall
-      // the capture loop.
+      // Tracking failed — keep the camera alive, surface a soft error.
       this.busy = false;
-      this.onStatus?.("error", msg.message);
+      this.emit({ tracking: this.tracking, trackingError: msg.message });
       return;
     }
     // result
@@ -141,7 +196,7 @@ export class HandTracker {
   }
 
   private loop = (): void => {
-    if (!this.running) return;
+    if (!this.tracking) return;
     this.rafId = requestAnimationFrame(this.loop);
     if (this.busy || !this.worker) return;
     if (this.video.readyState < 2) return;
@@ -150,10 +205,9 @@ export class HandTracker {
     this.lastVideoTime = this.video.currentTime;
 
     this.busy = true;
-    this.frameTimestamp += 1;
     createImageBitmap(this.video)
       .then((bitmap) => {
-        if (!this.worker || !this.running) {
+        if (!this.worker || !this.tracking) {
           bitmap.close();
           this.busy = false;
           return;
@@ -173,9 +227,12 @@ export class HandTracker {
   };
 
   stop(): void {
-    this.running = false;
+    this.tracking = false;
+    this.cameraLive = false;
     cancelAnimationFrame(this.rafId);
     if (this.worker) {
+      this.worker.onmessage = null;
+      this.worker.onerror = null;
       this.worker.terminate();
       this.worker = null;
     }
@@ -184,6 +241,16 @@ export class HandTracker {
       this.stream = null;
     }
     this.video.srcObject = null;
-    this.onStatus?.("idle");
+    this.emit({ phase: "idle", tracking: false, trackingError: null, detail: null });
+  }
+}
+
+/** HEAD-probe a URL to see if a self-hosted asset is present. */
+async function urlExists(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { method: "HEAD" });
+    return res.ok;
+  } catch {
+    return false;
   }
 }

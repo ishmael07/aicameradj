@@ -4,15 +4,16 @@ import { SamplerPads } from "./SamplerPads";
 import { useStore } from "../store";
 
 /**
- * Center mixer column: master level meter, crossfader, and the sampler.
- * Sits between the two decks.
+ * Center console: stereo master meter, the crossfader, and the 8-pad sampler —
+ * arranged as a compact floating bar that sits low-center so the performer
+ * stays visible above it.
  */
 export function Mixer(): JSX.Element {
   const crossfade = useStore((s) => s.crossfade);
   const setCrossfade = useStore((s) => s.setCrossfade);
   const meterRef = useRef<HTMLCanvasElement>(null);
 
-  // Master VU meter — driven by rAF reading store.masterLevel imperatively.
+  // Master level meter, driven by rAF reading store.masterLevel imperatively.
   useEffect(() => {
     let raf = 0;
     const draw = (): void => {
@@ -25,18 +26,20 @@ export function Mixer(): JSX.Element {
       const w = canvas.width;
       const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
-      const segs = 24;
+      const segs = 18;
       const lit = Math.round(level * segs);
-      // Canvas 2D doesn't resolve CSS custom properties, so use literal hex
-      // values that match the --good / --warn / --bad design tokens.
-      for (let i = 0; i < segs; i++) {
-        const y = h - (i + 1) * (h / segs) + 1;
-        const on = i < lit;
-        let color = "#06d6a0"; // --good
-        if (i > segs * 0.85) color = "#ff5d73"; // --bad
-        else if (i > segs * 0.65) color = "#ffd166"; // --warn
-        ctx.fillStyle = on ? color : "rgba(255,255,255,0.06)";
-        ctx.fillRect(2, y, w - 4, h / segs - 2);
+      const cols = 2;
+      const colW = (w - (cols - 1) * 3) / cols;
+      for (let cx = 0; cx < cols; cx++) {
+        for (let i = 0; i < segs; i++) {
+          const y = h - (i + 1) * (h / segs) + 1;
+          const on = i < lit;
+          let color = "#2ee6a6"; // --good
+          if (i > segs * 0.85) color = "#ff6b6b"; // --bad
+          else if (i > segs * 0.65) color = "#ffce5c"; // --warn
+          ctx.fillStyle = on ? color : "rgba(255,255,255,0.06)";
+          ctx.fillRect(cx * (colW + 3), y, colW, h / segs - 2);
+        }
       }
     };
     raf = requestAnimationFrame(draw);
@@ -47,28 +50,30 @@ export function Mixer(): JSX.Element {
     <div
       className="glass"
       style={{
-        width: 220,
-        flexShrink: 0,
-        padding: 18,
         display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 18,
+        alignItems: "stretch",
+        gap: 22,
+        padding: "16px 22px",
+        animation: "aicdj-rise 0.45s ease both",
       }}
     >
-      <div style={{ fontSize: 11, letterSpacing: 2, color: "var(--text-dim)", fontWeight: 700 }}>MASTER</div>
-
-      {/* VU meters L/R (single mono level mirrored for looks) */}
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-        <canvas ref={meterRef} width={20} height={120} style={{ borderRadius: 4 }} />
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-          <div style={{ fontSize: 9, color: "var(--text-faint)" }}>A ◄ ► B</div>
-          <Fader id="crossfader" value={crossfade} onChange={setCrossfade} axis="x" length={150} color="var(--accent)" />
-          <div style={{ fontSize: 9, color: "var(--text-faint)" }}>CROSSFADER</div>
+      {/* Master + crossfader */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, justifyContent: "center" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
+          <canvas ref={meterRef} width={26} height={64} style={{ borderRadius: 4 }} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <span className="label">Master</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--text-dim)" }}>
+              <span style={{ color: "var(--accent-a)", fontWeight: 700 }}>A</span>
+              <Fader id="crossfader" value={crossfade} onChange={setCrossfade} axis="x" length={130} color="var(--accent)" />
+              <span style={{ color: "var(--accent-b)", fontWeight: 700 }}>B</span>
+            </div>
+            <span className="label">Crossfader</span>
+          </div>
         </div>
       </div>
 
-      <div style={{ width: "100%", height: 1, background: "var(--glass-border)" }} />
+      <div style={{ width: 1, background: "var(--glass-border)" }} />
 
       <SamplerPads />
     </div>
